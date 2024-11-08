@@ -2,72 +2,159 @@
 #include <Adafruit_Sensor.h>
 #include <DHT.h>
 #include <DHT_U.h>
+#include <I2S.h>
 
-//Code based on DHT library example
+//Code based on DHT library examples
 
 // put function declarations here:
-void getTemperature();
-void getHumidity();
+float getTemperature();
+float getHumidity();
+void createAlert(float temperature);
+void sendData();
 
-#define DHTPIN 18     // Digital pin connected to the DHT sensor 
+#define DHTPIN          18        // Digital pin connected to the DHT sensor 
+#define REDPIN          22
+#define GREENPIN        23
 
-#define DHTTYPE    DHT22     // DHT 22 (AM2302)
+#define DHTTYPE         DHT22     // DHT 22 (AM2302)
 
-// See guide for details on sensor wiring and usage:
-//   https://learn.adafruit.com/dht/overview
+const float TEMPERATURE_HOT_LIMIT_INCREASE = 40.0; // If goes above this create alert and turn on red LED
+const float TEMPERATURE_HOT_LIMIT_DECREASE = 36.0; // If goes below this create event and turn on green LED
+
+const float TEMPERATURE_COLD_LIMIT_DECREASE = 25.0; // If goes BELOW this create alert and turn on red LED
+const float TEMPERATURE_COLD_LIMIT_INCRESE = 29.0; // If goes ABOVE this create event and turn on green LED
+
+const float HUMIDITY_HIGH_LIMIT_INCREASE = 70.0; // If goes above this create alert and turn on red LED
+const float HUMIDITY_HIGH_LIMIT_DECREASE = 66.0; // If goes BELOW this create EVENT and turn on GREEN LED
+
+const float HUMIDITY_LOW_LIMIT_DECREASE = 40.0; // If goes BELOW this create alert and turn on red LED
+const float HUMIDITY_LOW_LIMIT_INCREASE = 44.0; // If goes ABOVE this create EVENT and turn on GREEN LED
+
+const int delayMS = 3000;
+
+bool TEMP_HIGH = false;
+bool TEMP_LOW = false;
+
+const int count = 20;
+int arrayIndex = 0;
+
+float alertTemp[count][2];
 
 DHT_Unified dht(DHTPIN, DHTTYPE);
 
-uint32_t delayMS = 1000;
+const int startTime = millis();
 
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
   dht.begin();
-  pinMode(22, OUTPUT);
-  pinMode(23, OUTPUT);
-
+  pinMode(GREENPIN, OUTPUT);
+  pinMode(REDPIN, OUTPUT);
+  
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
   delay(delayMS);
-  getTemperature();
-  getHumidity();
+  float temperature = getTemperature();
+  float humidity = getHumidity();
+
+  if (Serial.available() > 0){
+    char s = Serial.read();
+    if (s == 'T'){
+      sendData();
+    }
+  }
+
+  if (TEMP_HIGH){
+    if (temperature < TEMPERATURE_HOT_LIMIT_DECREASE){
+      createAlert(temperature);
+      digitalWrite(REDPIN, LOW);
+      digitalWrite(GREENPIN, HIGH); // turn green led on
+    }
+  } else if (TEMP_LOW){
+    if (temperature < TEMPERATURE_COLD_LIMIT_INCRESE){
+      createAlert(temperature);
+      digitalWrite(REDPIN, LOW);
+      digitalWrite(GREENPIN, HIGH); // turn green led on
+    }
+  } else if (temperature > TEMPERATURE_HOT_LIMIT_INCREASE || temperature < TEMPERATURE_COLD_LIMIT_DECREASE){
+    createAlert(temperature);
+    digitalWrite(REDPIN, HIGH); // turn red led on
+    digitalWrite(GREENPIN, LOW);
+  } else{
+    digitalWrite(REDPIN, LOW);
+    digitalWrite(GREENPIN, HIGH); // turn green led on
+  }
 }
 
 // put function definitions here:
-void getTemperature() {
+float getTemperature() {
   sensors_event_t event;
   dht.temperature().getEvent(&event);
-  if (isnan(event.temperature)) {
+  float temperature = event.temperature;
+  if (isnan(temperature)) {
     Serial.println(F("Error reading temperature!"));
+    return -1;
   }
   else {
-    Serial.print(F("Temperature: "));
-    Serial.print(event.temperature);
-    Serial.println(F("°C"));
+    //Serial.print(F("Temperature: "));
+    //Serial.print(temperature);
+    //Serial.println(F("°C"));
 
-    if (event.temperature > 25.5){
-      digitalWrite(22, HIGH);
-      digitalWrite(23, LOW);
-    } else{
-      digitalWrite(22, LOW);
-      digitalWrite(23, HIGH);
-    }
+    return temperature;
   }
 }
 
-void getHumidity() {
+float getHumidity() {
   sensors_event_t event;
   dht.humidity().getEvent(&event);
-  if (isnan(event.relative_humidity)) {
+  float humidity = event.relative_humidity;
+
+  if (isnan(humidity)) {
     Serial.println(F("Error reading humidity!"));
+    return -1; 
   }
   else {
-    Serial.print(F("Humidity: "));
-    Serial.print(event.relative_humidity);
-    Serial.println(F("%"));
+    //Serial.print(F("Humidity: "));
+    //Serial.print(humidity);
+    //Serial.println(F("%"));
+    return humidity;
+  }
+}
+
+void createAlert(float temperature){
+
+  alertTemp[arrayIndex][0] = millis();
+  alertTemp[arrayIndex][2] = temperature;
+
+  arrayIndex++;
+
+  Serial.print("Temperature out of range: ");
+  Serial.print(temperature);
+  Serial.println(F("°C!"));
+
+  if (temperature > TEMPERATURE_HOT_LIMIT_INCREASE){
+    TEMP_HIGH = true;
+  } else{
+    TEMP_LOW = true;
+  }
+}
+
+void sendData(){
+  Serial.println("Events: ");
+  for (int i = 0; i < count; i++){
+    float time = alertTemp[i][0] - startTime;
+    float temp = alertTemp[i][1];
+    Serial.print("Time: ");
+    Serial.print(time);
+    Serial.print(", Temp: ");
+    Serial.println(temp);
   }
 
+  Serial.print("Current temperature: ");
+  Serial.println(getTemperature());
+
+  Serial.print("Current humidity: ");
+  Serial.println(getHumidity());
 }
