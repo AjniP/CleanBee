@@ -18,11 +18,11 @@ void sendData();
 
 #define DHTTYPE         DHT22     // DHT 22 (AM2302)
 
-const float TEMPERATURE_HOT_LIMIT_INCREASE = 40.0; // If goes above this create alert and turn on red LED
-const float TEMPERATURE_HOT_LIMIT_DECREASE = 36.0; // If goes below this create event and turn on green LED
+const float TEMPERATURE_HOT_LIMIT_INCREASE = 27.0; // If goes above this create alert and turn on red LED
+const float TEMPERATURE_HOT_LIMIT_DECREASE = 26.0; // If goes below this create event and turn on green LED
 
 const float TEMPERATURE_COLD_LIMIT_DECREASE = 25.0; // If goes BELOW this create alert and turn on red LED
-const float TEMPERATURE_COLD_LIMIT_INCRESE = 29.0; // If goes ABOVE this create event and turn on green LED
+const float TEMPERATURE_COLD_LIMIT_INCRESE = 25.5; // If goes ABOVE this create event and turn on green LED
 
 const float HUMIDITY_HIGH_LIMIT_INCREASE = 70.0; // If goes above this create alert and turn on red LED
 const float HUMIDITY_HIGH_LIMIT_DECREASE = 66.0; // If goes BELOW this create EVENT and turn on GREEN LED
@@ -130,15 +130,21 @@ void createAlert(float temperature){
 
   arrayIndex++;
 
+  if (temperature > TEMPERATURE_HOT_LIMIT_INCREASE){
+    TEMP_HIGH = true;
+  } else if (temperature < TEMPERATURE_COLD_LIMIT_DECREASE){
+    TEMP_LOW = true;
+  } else {
+    TEMP_HIGH = true;
+    TEMP_LOW = true;
+    Serial.print("Temperature within range: ");
+    Serial.print(temperature);
+    Serial.println(F("°C!"));
+    return;
+  }
   Serial.print("Temperature out of range: ");
   Serial.print(temperature);
   Serial.println(F("°C!"));
-
-  if (temperature > TEMPERATURE_HOT_LIMIT_INCREASE){
-    TEMP_HIGH = true;
-  } else{
-    TEMP_LOW = true;
-  }
 }
 
 void sendData(){
@@ -149,7 +155,15 @@ void sendData(){
     Serial.print("Time: ");
     Serial.print(time);
     Serial.print(", Temp: ");
-    Serial.println(temp);
+    Serial.print(temp);
+
+    if (temp > TEMPERATURE_HOT_LIMIT_INCREASE){
+      Serial.println("(hot)");
+    } else if (temp < TEMPERATURE_COLD_LIMIT_DECREASE){
+      Serial.println("(cold)");
+    } else {
+      Serial.println("(ok)");
+    }
   }
 
   Serial.print("Current temperature: ");
