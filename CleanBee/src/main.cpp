@@ -46,7 +46,7 @@ struct SensorData {
   float humidity;
 };
 
-const int dataSize = 1000;
+const int dataSize = 1000; // 8000 max
 SensorData dataPeriod[dataSize];
 int dataIndex = 0;
 

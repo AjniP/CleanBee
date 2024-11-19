@@ -1,0 +1,7 @@
+CleanBee/.pio
+CleanBee/.vscode/.browse.c_cpp.db*
+CleanBee/.vscode/c_cpp_properties.json
+CleanBee/.vscode/launch.json
+CleanBee/.vscode/ipch
+PC/*.json
+PC/*.csv
