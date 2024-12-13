@@ -2,15 +2,12 @@
 #include <Adafruit_Sensor.h>
 #include <DHT.h>
 #include <DHT_U.h>
-#include <I2S.h>
 #include <ArduinoJson.h>
 
 //Code based on DHT and json library examples
 
-// put function declarations here:
 float getTemperature();
 float getHumidity();
-void createAlert(float temperature, float humidity);
 void sendData();
 bool getMeasurements();
 
@@ -21,19 +18,19 @@ bool getMeasurements();
 #define DHTTYPE         DHT22     // DHT 22 (AM2302)
 
 
-const float TEMPERATURE_HOT_LIMIT_INCREASE = 27.0; // If goes above this create alert and turn on red LED
-const float TEMPERATURE_HOT_LIMIT_DECREASE = 26.0; // If goes below this create event and turn on green LED
+const float TEMPERATURE_HOT_LIMIT_INCREASE = 36.0; // If goes ABOVE this set TEMP_HIGH flag true and turn on red LED
+const float TEMPERATURE_HOT_LIMIT_DECREASE = 35.0; // If goes BELOW this set TEMP_HIGH flag false and turn off red LED
 
-const float TEMPERATURE_COLD_LIMIT_DECREASE = 25.0; // If goes BELOW this create alert and turn on red LED
-const float TEMPERATURE_COLD_LIMIT_INCRESE = 25.5; // If goes ABOVE this create event and turn on green LED
+const float TEMPERATURE_COLD_LIMIT_DECREASE = 33.0; // If goes BELOW this set TEMP_LOW true and turn on red LED
+const float TEMPERATURE_COLD_LIMIT_INCREASE = 34.0; // If goes ABOVE this set TEMP_LOW false and turn off red LED
 
-const float HUMIDITY_HIGH_LIMIT_INCREASE = 70.0; // If goes above this create alert and turn on red LED
-const float HUMIDITY_HIGH_LIMIT_DECREASE = 66.0; // If goes BELOW this create EVENT and turn on GREEN LED
+const float HUMIDITY_HIGH_LIMIT_INCREASE = 95.0; // If goes ABOVE this turn on red LED
+const float HUMIDITY_HIGH_LIMIT_DECREASE = 94.0; // If goes BELOW this turn off red LED
 
-const float HUMIDITY_LOW_LIMIT_DECREASE = 40.0; // If goes BELOW this create alert and turn on red LED
-const float HUMIDITY_LOW_LIMIT_INCREASE = 44.0; // If goes ABOVE this create EVENT and turn on GREEN LED
+const float HUMIDITY_LOW_LIMIT_DECREASE = 90.0; // If goes BELOW this turn on red LED
+const float HUMIDITY_LOW_LIMIT_INCREASE = 91.0; // If goes ABOVE this turn off red LED
 
-const int delayMS = 60; 
+float delayMS; 
 
 bool TEMP_HIGH = false;
 bool TEMP_LOW = false;
@@ -46,23 +43,25 @@ struct SensorData {
   float humidity;
 };
 
-const int dataSize = 1000;
+const float measurementLength = 5; // in minutes
+const int dataSize = 175; // 8000 max
 SensorData dataPeriod[dataSize];
 int dataIndex = 0;
 
 void setup() {
-  // put your setup code here, to run once:
   Serial.begin(115200);
   dht.begin();
   pinMode(GREENPIN, OUTPUT);
   pinMode(REDPIN, OUTPUT);
+
+  delayMS = (measurementLength*60)/dataSize; //automatically determine the measurement interval
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
+
   delay(delayMS);
 
-  if (dataIndex >= dataSize) {
+  if (dataIndex >= dataSize) { // if dataPeriod array is full stop measurements and wait for command to send data
     while(true){
       if (Serial.available() > 0) {
         String command = Serial.readStringUntil('\n');
@@ -76,6 +75,7 @@ void loop() {
     dataIndex = 0; 
   }
   
+  // saves measurements to dataPeriod
   getMeasurements();
 
   float temperature = getTemperature();
@@ -84,23 +84,27 @@ void loop() {
   if (TEMP_HIGH){
     if (temperature < TEMPERATURE_HOT_LIMIT_DECREASE){
       digitalWrite(REDPIN, LOW);
-      digitalWrite(GREENPIN, HIGH); // turn green led on
+      TEMP_HIGH = false;
     }
-  } else if (TEMP_LOW){
-    if (temperature < TEMPERATURE_COLD_LIMIT_INCRESE){
+  } else if (TEMP_LOW){ 
+    if (temperature < TEMPERATURE_COLD_LIMIT_INCREASE){
       digitalWrite(REDPIN, LOW);
-      digitalWrite(GREENPIN, HIGH); // turn green led on
+      TEMP_LOW = false;
     }
-  } else if (temperature > TEMPERATURE_HOT_LIMIT_INCREASE || temperature < TEMPERATURE_COLD_LIMIT_DECREASE){
+  } else if (temperature > TEMPERATURE_HOT_LIMIT_INCREASE){
     digitalWrite(REDPIN, HIGH); // turn red led on
-    digitalWrite(GREENPIN, LOW);
-  } else{
-    digitalWrite(REDPIN, LOW);
-    digitalWrite(GREENPIN, HIGH); // turn green led on
+    TEMP_HIGH = true;
+  } else if(temperature < TEMPERATURE_COLD_LIMIT_DECREASE){
+    digitalWrite(REDPIN, HIGH); // turn red led on
+    TEMP_LOW = true;
+  } else {
+    digitalWrite(REDPIN, LOW); // turn red led off
+    TEMP_LOW = false;
+    TEMP_HIGH = false;
   }
+
 }
 
-// put function definitions here:
 float getTemperature() {
   sensors_event_t event;
   dht.temperature().getEvent(&event);
@@ -115,10 +119,12 @@ float getTemperature() {
   }
 }
 
+
 bool getMeasurements() {
   sensors_event_t event;
   dht.temperature().getEvent(&event);
   float temperature = event.temperature;
+  dht.humidity().getEvent(&event);
   float humidity = event.relative_humidity;
 
   if (isnan(temperature) || isnan(humidity)) {
@@ -136,6 +142,7 @@ bool getMeasurements() {
   return false;
 }
 
+
 float getHumidity() {
   sensors_event_t event;
   dht.humidity().getEvent(&event);
@@ -146,54 +153,23 @@ float getHumidity() {
     return -1; 
   }
   else {
-    //Serial.print(F("Humidity: "));
-    //Serial.print(humidity);
-    //Serial.println(F("%"));
     return humidity;
   }
 }
 
-void createAlert(float temperature, float humidity){
-
-  if (temperature > TEMPERATURE_HOT_LIMIT_INCREASE){
-    TEMP_HIGH = true;
-  } else if (temperature < TEMPERATURE_COLD_LIMIT_DECREASE){
-    TEMP_LOW = true;
-  } else {
-    TEMP_HIGH = true;
-    TEMP_LOW = true;
-    Serial.print("Temperature within range: ");
-    Serial.print(temperature);
-    Serial.println(F("°C!"));
-    return;
-  }
-
-  Serial.print("Temperature out of range: ");
-  Serial.print(temperature);
-  Serial.println(F("°C!"));
-}
 
 void sendData(){
 
-  JsonDocument doc; // Adjust size as needed
+  JsonDocument doc;
   JsonArray readings = doc["readings"].add<JsonArray>();
-  //Serial.println("Events: ");
 
   for (int i = 0; i < dataIndex; i++){
     JsonObject reading = readings.add<JsonObject>();
     reading["timestamp_ms"] = dataPeriod[i].timestamp_ms;
     reading["temperature"] = dataPeriod[i].temperature;
     reading["humidity"] = dataPeriod[i].humidity;
-
-    /*if (temp > TEMPERATURE_HOT_LIMIT_INCREASE){
-      Serial.println("(hot)");
-    } else if (temp < TEMPERATURE_COLD_LIMIT_DECREASE){
-      Serial.println("(cold)");
-    } else {
-      Serial.println("(ok)");
-    }*/
-  
   }
+
   serializeJson(doc, Serial);
 
   Serial.println();
